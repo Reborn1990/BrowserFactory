@@ -1,0 +1,13 @@
+export const TILE = 32;
+
+export const DIRECTIONS = {
+    E: { dx: 1, dy: 0, next: 'S', label: 'EAST' },
+    S: { dx: 0, dy: 1, next: 'W', label: 'SOUTH' },
+    W: { dx: -1, dy: 0, next: 'N', label: 'WEST' },
+    N: { dx: 0, dy: -1, next: 'E', label: 'NORTH' }
+};
+
+export const ITEM_DATA = {
+    'O': { iron: '#44aaff', copper: '#ff8844', coal: '#333' },
+    'P': { iron: '#aaddff', copper: '#ffccaa' }
+};
