@@ -1,0 +1,95 @@
+import { TILE, DIRECTIONS, ITEM_DATA } from './constants.js';
+import { updateGameState } from './engine.js';
+
+const GameState = {
+    entities: [],
+    inventory: { coal: 10, iron: 0, copper: 0 },
+    selectedTool: 'interact',
+    currentRotation: 'E',
+    nodes: [
+        { x: 2, y: 2, type: 'coal', color: '#222' }, { x: 3, y: 2, type: 'coal', color: '#222' },
+        { x: 10, y: 2, type: 'iron', color: '#44aaff' }, { x: 11, y: 2, type: 'iron', color: '#44aaff' },
+        { x: 10, y: 10, type: 'copper', color: '#ff8844' }, { x: 11, y: 10, type: 'copper', color: '#ff8844' }
+    ]
+};
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let lastTime = 0;
+
+// Expose setTool to window because HTML onclick needs it
+window.setTool = (t) => {
+    GameState.selectedTool = t;
+    document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    document.getElementById('btn-'+t).classList.add('active');
+};
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Grid
+    ctx.strokeStyle = '#222'; ctx.beginPath();
+    for(let i=0; i<=canvas.width; i+=TILE) { ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); }
+    for(let j=0; j<=canvas.height; j+=TILE) { ctx.moveTo(0,j); ctx.lineTo(canvas.width,j); }
+    ctx.stroke();
+
+    // Nodes
+    GameState.nodes.forEach(n => {
+        ctx.fillStyle = n.color;
+        ctx.fillRect(n.x*TILE + 2, n.y*TILE + 2, TILE - 4, TILE - 4);
+    });
+
+    // Entities
+    GameState.entities.forEach(e => {
+        ctx.fillStyle = e.type === 'belt' ? '#333' : '#555';
+        ctx.fillRect(e.x*TILE+2, e.y*TILE+2, (e.w||1)*TILE-4, (e.h||1)*TILE-4);
+        
+        const d = DIRECTIONS[e.direction];
+        ctx.fillStyle = '#fff';
+        ctx.fillRect((e.x + (e.w||1)/2 + d.dx*0.4)*TILE-2, (e.y + (e.h||1)/2 + d.dy*0.4)*TILE-2, 4, 4);
+
+        if (e.type === 'belt') {
+            e.items.forEach(item => {
+                const ix = (e.x + 0.5 + d.dx*(item.progress-0.5))*TILE;
+                const iy = (e.y + 0.5 + d.dy*(item.progress-0.5))*TILE;
+                ctx.fillStyle = ITEM_DATA[item.label][item.source];
+                ctx.beginPath(); ctx.arc(ix, iy, 10, 0, Math.PI*2); ctx.fill();
+            });
+        }
+    });
+}
+
+canvas.addEventListener('mousedown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const gx = Math.floor((e.clientX - rect.left) / TILE);
+    const gy = Math.floor((e.clientY - rect.top) / TILE);
+    const existing = GameState.entities.find(ent => gx >= ent.x && gx < ent.x + (ent.w||1) && gy >= ent.y && gy < ent.y + (ent.h||1));
+
+    if (GameState.selectedTool === 'interact') {
+        if (existing && ['miner', 'smelter'].includes(existing.type) && GameState.inventory.coal > 0) {
+            GameState.inventory.coal--; existing.fuel += 2;
+        } else if (!existing) {
+            const node = GameState.nodes.find(n => n.x === gx && n.y === gy);
+            if (node) GameState.inventory[node.type]++;
+        }
+    } else if (GameState.selectedTool === 'delete' && existing) {
+        GameState.entities = GameState.entities.filter(ent => ent !== existing);
+    } else if (!existing) {
+        let w = (['miner', 'smelter'].includes(GameState.selectedTool)) ? 2 : 1;
+        GameState.entities.push({ x: gx, y: gy, w, h: w, type: GameState.selectedTool, direction: GameState.currentRotation, items: [], buffer: [], timer: 0, fuel: 0 });
+    }
+});
+
+window.addEventListener('keydown', (e) => {
+    if(e.key.toLowerCase() === 'r') GameState.currentRotation = DIRECTIONS[GameState.currentRotation].next;
+});
+
+function loop(t) {
+    updateGameState(GameState, Math.min(t - lastTime, 100));
+    document.getElementById('status-line').innerText = `${GameState.selectedTool.toUpperCase()} | DIR: ${DIRECTIONS[GameState.currentRotation].label}`;
+    document.getElementById('inv-display').innerText = `COAL: ${GameState.inventory.coal} | IRON: ${GameState.inventory.iron} | COPPER: ${GameState.inventory.copper}`;
+    draw();
+    lastTime = t;
+    requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
