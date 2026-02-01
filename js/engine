@@ -1,0 +1,64 @@
+import { DIRECTIONS } from './constants.js';
+
+export function updateGameState(GameState, dt) {
+    GameState.entities.forEach(ent => {
+        const dir = DIRECTIONS[ent.direction];
+
+        // 1. BELT LOGIC
+        if (ent.type === 'belt') {
+            ent.items.forEach((item, i) => {
+                if (item.progress < 1.0) {
+                    item.progress += 0.005 * dt;
+                } else {
+                    const nx = ent.x + dir.dx, ny = ent.y + dir.dy;
+                    const next = GameState.entities.find(e => 
+                        nx >= e.x && nx < e.x + (e.w || 1) && 
+                        ny >= e.y && ny < e.y + (e.h || 1)
+                    );
+
+                    if (next && next !== ent) {
+                        if (next.type === 'belt' && next.items.length < 2) {
+                            ent.items.splice(i, 1);
+                            item.progress = 0;
+                            next.items.push(item);
+                        } else if (['smelter', 'miner', 'assembler'].includes(next.type)) {
+                            if (item.source === 'coal' && next.fuel < 10) {
+                                next.fuel++;
+                                ent.items.splice(i, 1);
+                            } else if (next.type === 'smelter' && item.label === 'O' && next.buffer.length < 5) {
+                                next.buffer.push(item);
+                                ent.items.splice(i, 1);
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 2. PRODUCTION LOGIC (Miner & Smelter)
+        if ((ent.type === 'miner' || ent.type === 'smelter') && ent.fuel > 0) {
+            ent.timer += dt;
+            const threshold = ent.type === 'miner' ? 2000 : 3000;
+            
+            if (ent.timer >= threshold) {
+                const outX = ent.x + (dir.dx * ent.w), outY = ent.y + (dir.dy * ent.h);
+                const outBelt = GameState.entities.find(e => e.x === outX && e.y === outY && e.type === 'belt');
+                
+                if (outBelt && outBelt.items.length < 2) {
+                    if (ent.type === 'miner') {
+                        const node = GameState.nodes.find(n => n.x >= ent.x && n.x < ent.x + 2 && n.y >= ent.y && n.y < ent.y + 2);
+                        if (node) {
+                            outBelt.items.push({ label: 'O', source: node.type, progress: 0 });
+                            ent.fuel -= 0.1;
+                        }
+                    } else if (ent.type === 'smelter' && ent.buffer.length > 0) {
+                        const ore = ent.buffer.shift();
+                        outBelt.items.push({ label: 'P', source: ore.source, progress: 0 });
+                        ent.fuel -= 0.2;
+                    }
+                    ent.timer = 0;
+                }
+            }
+        }
+    });
+}
